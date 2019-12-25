@@ -76,12 +76,13 @@ resources:
             -
               type: interface
               name: nic2
+              use_dhcp: false
               addresses:
               -
                 ip_netmask: {get_param: ExternalIpSubnet}
               routes:
                 -
-                  default: true
+                  ip_netmask: 0.0.0.0/0
                   next_hop: {get_param: ExternalInterfaceDefaultRoute}
             -
               type: ovs_bridge
@@ -105,6 +106,7 @@ resources:
                   name: nic1
                   # force the MAC address of the bridge to this interface
                   primary: true
+                  use_dhcp: false
                 -
                   type: vlan
                   vlan_id: {get_param: InternalApiNetworkVlanID}

@@ -404,13 +404,13 @@ parameters:
     description: |
         Comma-separated list of <tun_min>:<tun_max> tuples enumerating ranges
         of GRE tunnel IDs that are available for tenant network allocation
-    default: ["1:1000", ]
+    default: "1:1000"
     type: comma_delimited_list
   NeutronVniRanges:
     description: |
         Comma-separated list of <vni_min>:<vni_max> tuples enumerating ranges
         of VXLAN VNI IDs that are available for tenant network allocation
-    default: ["1:1000", ]
+    default: "1:1000"
     type: comma_delimited_list
   NovaPassword:
     default: unset
@@ -437,6 +437,7 @@ parameters:
     default: ''  # Has to be here because of the ignored empty value bug
     hidden: true
   RabbitPassword:
+    default: guest
     description: The password for RabbitMQ
     type: string
     hidden: true
@@ -663,7 +664,6 @@ resources:
           debug: {get_input: debug}
           host: {get_input: controller_virtual_ip}
           port: {get_input: glance_port}
-          uri: {get_input: glance_uri}
           protocol: {get_input: glance_protocol}
           service-password: {get_input: glance_password}
           swift-store-user: service:glance

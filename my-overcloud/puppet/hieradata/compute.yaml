@@ -7,6 +7,9 @@ nova::compute::instance_usage_audit: true
 nova::compute::instance_usage_audit_period: 'hour'
 nova::compute::vnc_enabled: true
 
+nova::compute::libvirt::vncserver_listen: '0.0.0.0'
+nova::compute::libvirt::migration_support: true
+
 nova::compute::rbd::libvirt_rbd_secret_uuid: "%{hiera('ceph::profile::params::fsid')}"
 
 nova::config::nova_config:
@@ -14,5 +17,3 @@ nova::config::nova_config:
     value: 'volumev2:cinderv2:internalURL'
 
 ceilometer::agent::auth::auth_tenant_name: 'service'
-ceilometer::agent::auth::auth_endpoint_type: 'internalURL'
-compute_classes: []

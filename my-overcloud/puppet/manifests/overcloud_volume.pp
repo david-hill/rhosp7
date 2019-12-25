@@ -15,15 +15,11 @@
 
 include tripleo::packages
 
-create_resources(kmod::load, hiera('kernel_modules'), {})
 create_resources(sysctl::value, hiera('sysctl_settings'), {})
-Exec <| tag == 'kmod::load' |>  -> Sysctl <| |>
 
 if count(hiera('ntp::servers')) > 0 {
   include ::ntp
 }
-
-include ::timezone
 
 include ::cinder
 include ::cinder::config
@@ -43,7 +39,7 @@ if $cinder_enable_iscsi {
 
 $cinder_enabled_backends = any2array($cinder_iscsi_backend)
 class { '::cinder::backends' :
-  enabled_backends => union($cinder_enabled_backends, hiera('cinder_user_enabled_backends')),
+  enabled_backends => $cinder_enabled_backends,
 }
 
 $snmpd_user = hiera('snmpd_readonly_user_name')
@@ -57,4 +53,3 @@ class { 'snmp':
 }
 
 package_manifest{'/var/lib/tripleo/installed-packages/overcloud_volume': ensure => present}
-hiera_include('volume_classes')

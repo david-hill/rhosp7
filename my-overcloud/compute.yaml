@@ -163,13 +163,13 @@ parameters:
     description: |
         Comma-separated list of <tun_min>:<tun_max> tuples enumerating ranges
         of GRE tunnel IDs that are available for tenant network allocation
-    default: ["1:1000", ]
+    default: "1:1000"
     type: comma_delimited_list
   NeutronVniRanges:
     description: |
         Comma-separated list of <vni_min>:<vni_max> tuples enumerating ranges
         of VXLAN VNI IDs that are available for tenant network allocation
-    default: ["1:1000", ]
+    default: "1:1000"
     type: comma_delimited_list
   NeutronPublicInterfaceRawDevice:
     default: ''
@@ -252,6 +252,7 @@ parameters:
     type: string
     default: ''  # Has to be here because of the ignored empty value bug
   RabbitPassword:
+    default: guest
     description: The password for RabbitMQ
     type: string
     hidden: true

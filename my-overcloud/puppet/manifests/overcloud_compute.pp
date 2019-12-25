@@ -15,15 +15,11 @@
 
 include tripleo::packages
 
-create_resources(kmod::load, hiera('kernel_modules'), {})
 create_resources(sysctl::value, hiera('sysctl_settings'), {})
-Exec <| tag == 'kmod::load' |>  -> Sysctl <| |>
 
 if count(hiera('ntp::servers')) > 0 {
   include ::ntp
 }
-
-include ::timezone
 
 file { ['/etc/libvirt/qemu/networks/autostart/default.xml',
         '/etc/libvirt/qemu/networks/default.xml']:
@@ -38,20 +34,6 @@ exec { 'libvirt-default-net-destroy':
   before => Service['libvirt'],
 }
 
-# When utilising images for deployment, we need to reset the iSCSI initiator name to make it unique
-exec { 'reset-iscsi-initiator-name':
-  command => '/bin/echo InitiatorName=$(/usr/sbin/iscsi-iname) > /etc/iscsi/initiatorname.iscsi',
-  onlyif  => '/usr/bin/test ! -f /etc/iscsi/.initiator_reset',
-}->
-
-file { '/etc/iscsi/.initiator_reset':
-  ensure => present,
-} ~>
-service{"iscsid":
-  ensure => 'running',
-} ~>
-Service["nova-compute"]
-
 include ::nova
 include ::nova::config
 include ::nova::compute
@@ -63,14 +45,6 @@ nova_config {
 
 $nova_enable_rbd_backend = hiera('nova_enable_rbd_backend', false)
 if $nova_enable_rbd_backend {
-  if str2bool(hiera('ceph_ipv6', false)) {
-    $mon_host = hiera('ceph_mon_host_v6')
-  } else {
-    $mon_host = hiera('ceph_mon_host')
-  }
-  class { '::ceph::profile::params':
-    mon_host            => $mon_host,
-  }
   include ::ceph::profile::client
 
   $client_keys = hiera('ceph::profile::params::client_keys')
@@ -91,109 +65,24 @@ if hiera('cinder_enable_nfs_backend', false) {
   package {'nfs-utils': } -> Service['nova-compute']
 }
 
-# START CVE-2017-2637 - Switch to SSH for migration
-# Libvirt setup (live-migration)
-class { '::nova::migration::libvirt':
-  transport          => 'ssh',
-  client_user        => 'nova_migration',
-  client_extraparams => {'keyfile' => '/etc/nova/migration/identity'}
-}
-
-class { '::nova::compute::libvirt':
-  migration_support => false
-}
-
-# Nova SSH tunnel setup (cold-migration)
-# Server side
-include ::ssh::server
-$allow_type = sprintf('LocalAddress %s User', join(hiera('migration_ssh_localaddrs'),','))
-$allow_name = 'nova_migration'
-$deny_type = 'LocalAddress'
-$deny_name = sprintf('!%s', join(hiera('migration_ssh_localaddrs'),',!'))
-ssh::server::match_block { 'nova_migration deny':
-  name    => $deny_name,
-  type    => $deny_type,
-  order   => 2,
-  options => {
-    'DenyUsers' => 'nova_migration'
-  },
-  notify  => Service['sshd']
-}
-ssh::server::match_block { 'nova_migration allow':
-  name    => $allow_name,
-  type    => $allow_type,
-  order   => 1,
-  options => {
-    'ForceCommand'           => '/bin/nova-migration-wrapper',
-    'PasswordAuthentication' => 'no',
-    'AllowTcpForwarding'     => 'no',
-    'X11Forwarding'          => 'no',
-    'AuthorizedKeysFile'     => '/etc/nova/migration/authorized_keys'
-  },
-  notify  => Service['sshd']
-}
-$migration_ssh_key = hiera('migration_ssh_key')
-file { '/etc/nova/migration/authorized_keys':
-  content => $migration_ssh_key['public_key'],
-  mode    => '0640',
-  owner   => 'root',
-  group   => 'nova_migration',
-  require => Package['openstack-nova-migration'],
-}
-# Client side
-file { '/etc/nova/migration/identity':
-  content => $migration_ssh_key['private_key'],
-  mode    => '0600',
-  owner   => 'nova',
-  group   => 'nova',
-  require => Package['openstack-nova-migration'],
-}
-
-# Remove the VIR_MIGRATE_TUNNELLED from the block_migration_flags which is
-# needed to work in RHOSP7, other versions work with the defaults. See
-# rhbz#1211457
-if !defined(Nova_config['libvirt/block_migration_flag']) {
-  nova_config {
-    'libvirt/block_migration_flag': value => 'VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_NON_SHARED_INC';
-  }
-}
-package {'openstack-nova-migration':
-  ensure => installed
-}
-# END CVE-2017-2637118
-
+include ::nova::compute::libvirt
 include ::nova::network::neutron
 include ::neutron
 
-# If the value of core plugin is set to 'nuage',
-# include nuage agent,
-# else use the default value of 'ml2'
-if hiera('neutron::core_plugin') == 'neutron.plugins.nuage.plugin.NuagePlugin' {
-  include ::nuage::vrs
-  include ::nova::compute::neutron
+class { 'neutron::plugins::ml2':
+  flat_networks        => split(hiera('neutron_flat_networks'), ','),
+  tenant_network_types => [hiera('neutron_tenant_network_type')],
+}
 
-  class { '::nuage::metadataagent':
-    nova_os_tenant_name => hiera('nova::api::admin_tenant_name'),
-    nova_os_password    => hiera('nova_password'),
-    nova_metadata_ip    => hiera('nova_metadata_node_ips'),
-    nova_auth_ip        => hiera('keystone_public_api_virtual_ip'),
-  }
-} else {
-  class { '::neutron::plugins::ml2':
-    flat_networks        => split(hiera('neutron_flat_networks'), ','),
-    tenant_network_types => [hiera('neutron_tenant_network_type')],
-  }
+class { 'neutron::agents::ml2::ovs':
+  bridge_mappings => split(hiera('neutron_bridge_mappings'), ','),
+  tunnel_types    => split(hiera('neutron_tunnel_types'), ','),
+}
 
-  class { '::neutron::agents::ml2::ovs':
-    bridge_mappings => split(hiera('neutron_bridge_mappings'), ','),
-    tunnel_types    => split(hiera('neutron_tunnel_types'), ','),
-  }
-
-  if 'cisco_n1kv' in hiera('neutron_mechanism_drivers') {
-    class { '::neutron::agents::n1kv_vem':
-      n1kv_source  => hiera('n1kv_vem_source', undef),
-      n1kv_version => hiera('n1kv_vem_version', undef),
-    }
+if 'cisco_n1kv' in hiera('neutron_mechanism_drivers') {
+  class { 'neutron::agents::n1kv_vem':
+    n1kv_source          => hiera('n1kv_vem_source', undef),
+    n1kv_version         => hiera('n1kv_vem_version', undef),
   }
 }
 
@@ -213,4 +102,3 @@ class { 'snmp':
 }
 
 package_manifest{'/var/lib/tripleo/installed-packages/overcloud_compute': ensure => present}
-hiera_include('compute_classes')

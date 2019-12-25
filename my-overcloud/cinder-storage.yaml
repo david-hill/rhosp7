@@ -62,11 +62,6 @@ parameters:
           }
         }
     type: json
-  BlockStorageExtraConfig:
-    default: {}
-    description: |
-      Role specific additional configuration to inject into the cluster.
-    type: json
   Flavor:
     description: Flavor for block storage nodes to request when deploying.
     type: string
@@ -85,6 +80,7 @@ parameters:
     description: Name of an existing EC2 KeyPair to enable SSH access to the instances
     type: string
   RabbitPassword:
+    default: 'guest'
     type: string
   RabbitUserName:
     default: 'guest'

@@ -42,18 +42,6 @@ parameters:
   Hostname:
     type: string
     default: '' # Defaults to Heat created hostname
-  ExtraConfig:
-    default: {}
-    description: |
-      Additional configuration to inject into the cluster. Note
-      that CephStorageExtraConfig takes precedence over ExtraConfig.
-    type: json
-  CephStorageExtraConfig:
-    default: {}
-    description: |
-      Role specific additional configuration to inject into the cluster.
-    type: json
-
 
 resources:
   CephStorage:
