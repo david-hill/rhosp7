@@ -450,8 +450,8 @@ resources:
                 migration_ssh_key: {get_input: migration_ssh_key}
                 migration_ssh_localaddrs: {get_input: migration_ssh_localaddrs}
                 nova::use_ipv6: {get_input: nova_ipv6}
-                ssh:server::options: {get_input: ssh_server_options}
-                ssh:server::storeconfigs_enabled: false
+                ssh::server::options: {get_input: ssh_server_options}
+                ssh::server::storeconfigs_enabled: false
                 nova::debug: {get_input: debug}
                 nova::rabbit_userid: {get_input: rabbit_username}
                 nova::rabbit_password: {get_input: rabbit_password}
