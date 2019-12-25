@@ -91,13 +91,6 @@ if hiera('cinder_enable_nfs_backend', false) {
   package {'nfs-utils': } -> Service['nova-compute']
 }
 
-$nova_ipv6 = str2bool(hiera('nova::use_ipv6', false))
-if $nova_ipv6 {
-  $vncserver_listen = '::0'
-} else {
-  $vncserver_listen = '0.0.0.0'
-}
-
 # START CVE-2017-2637 - Switch to SSH for migration
 # Libvirt setup (live-migration)
 class { '::nova::migration::libvirt':
@@ -106,8 +99,8 @@ class { '::nova::migration::libvirt':
   client_extraparams => {'keyfile' => '/etc/nova/migration/identity'}
 }
 
-class { '::nova::compute::libvirt' :
-  vncserver_listen => $vncserver_listen,
+class { '::nova::compute::libvirt':
+  migration_support => false
 }
 
 # Nova SSH tunnel setup (cold-migration)

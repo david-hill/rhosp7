@@ -451,7 +451,7 @@ resources:
                 migration_ssh_localaddrs: {get_input: migration_ssh_localaddrs}
                 nova::use_ipv6: {get_input: nova_ipv6}
                 ssh::server::options: {get_input: ssh_server_options}
-                ssh::server::storeconfigs_enabled: false
+                ssh:.server::storeconfigs_enabled: false
                 nova::debug: {get_input: debug}
                 nova::rabbit_userid: {get_input: rabbit_username}
                 nova::rabbit_password: {get_input: rabbit_password}
@@ -460,6 +460,7 @@ resources:
                 nova_compute_driver: {get_input: nova_compute_driver}
                 nova::compute::libvirt::libvirt_virt_type: {get_input: nova_compute_libvirt_type}
                 nova::compute::neutron::libvirt_vif_driver: {get_input: nova_compute_libvirt_vif_driver}
+                nova::compute::libvirt::vncserver_listen: {get_input: nova_compute_libvirt_vncserver_listen}
                 nova_api_host: {get_input: nova_api_host}
                 nova::compute::vncproxy_host: {get_input: nova_public_ip}
                 nova_enable_rbd_backend: {get_input: nova_enable_rbd_backend}
@@ -531,6 +532,7 @@ resources:
         nova_compute_driver: {get_param: NovaComputeDriver}
         nova_compute_libvirt_type: {get_param: NovaComputeLibvirtType}
         nova_compute_libvirt_vif_driver: {get_param: NovaComputeLibvirtVifDriver}
+        nova_compute_libvirt_vncserver_listen: {get_attr: [NetIpMap, net_ip_map, {get_param: [ServiceNetMap, NovaLibvirtNetwork]}]}
         nova_public_ip: {get_param: NovaPublicIP}
         nova_api_host: {get_param: NovaApiHost}
         nova_password: {get_param: NovaPassword}
