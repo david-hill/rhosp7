@@ -273,6 +273,10 @@ parameters:
     type: string
     hidden: true
     default: ''  # Has to be here because of the ignored empty value bug
+  MysqlClustercheckPassword:
+    type: string
+    hidden: true
+    default: "''" # Need to set a default to avoid missing property value errors on minor updates
   NeutronExternalNetworkBridge:
     description: Name of bridge used for external network traffic.
     type: string
@@ -417,13 +421,13 @@ parameters:
     description: |
         Comma-separated list of <tun_min>:<tun_max> tuples enumerating ranges
         of GRE tunnel IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NeutronVniRanges:
     description: |
         Comma-separated list of <vni_min>:<vni_max> tuples enumerating ranges
         of VXLAN VNI IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NovaIPv6:
     default: false
@@ -461,7 +465,6 @@ parameters:
     default: ''  # Has to be here because of the ignored empty value bug
     hidden: true
   RabbitPassword:
-    default: guest
     description: The password for RabbitMQ
     type: string
     hidden: true
@@ -521,6 +524,10 @@ parameters:
     default: 10
     description: Partition Power to use when building Swift rings
     type: number
+  SwiftRingBuild:
+    default: true
+    description: Whether to manage Swift rings or not
+    type: boolean
   SwiftPassword:
     default: unset
     description: The password for the swift service account, used by the swift proxy
@@ -615,9 +622,26 @@ resources:
       networks:
         - network: ctlplane
       user_data_format: SOFTWARE_CONFIG
-      user_data: {get_resource: NodeUserData}
+      user_data: {get_resource: UserData}
       name: {get_param: Hostname}
 
+  # Combine the NodeAdminUserData and NodeUserData mime archives
+  UserData:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+      - config: {get_resource: NodeAdminUserData}
+        type: multipart
+      - config: {get_resource: NodeUserData}
+        type: multipart
+
+  # Creates the "heat-admin" user if configured via the environment
+  # Should return a OS::Heat::MultipartMime reference via OS::stack_id
+  NodeAdminUserData:
+    type: OS::TripleO::NodeAdminUserData
+
+  # For optional operator additional userdata
+  # Should return a OS::Heat::MultipartMime reference via OS::stack_id
   NodeUserData:
     type: OS::TripleO::NodeUserData
 
@@ -827,6 +851,7 @@ resources:
         mysql_innodb_buffer_pool_size: {get_param: MysqlInnodbBufferPoolSize}
         mysql_max_connections: {get_param: MysqlMaxConnections}
         mysql_root_password: {get_param: MysqlRootPassword}
+        mysql_clustercheck_password: {get_param: MysqlClustercheckPassword}
         mysql_cluster_name:
           str_replace:
             template: tripleo-CLUSTER
@@ -965,6 +990,7 @@ resources:
         swift_hash_suffix: {get_param: SwiftHashSuffix}
         swift_password: {get_param: SwiftPassword}
         swift_part_power: {get_param: SwiftPartPower}
+        swift_ring_build: {get_param: SwiftRingBuild}
         swift_replicas: {get_param: SwiftReplicas}
         swift_min_part_hours: {get_param: SwiftMinPartHours}
         swift_mount_check: {get_param: SwiftMountCheck}
@@ -1059,14 +1085,11 @@ resources:
                 swift::storage::all::storage_local_net_ip: {get_input: swift_management_network}
                 swift::swift_hash_suffix: {get_input: swift_hash_suffix}
                 swift::proxy::authtoken::admin_password: {get_input: swift_password}
+                tripleo::ringbuilder::build_ring: { get_input: swift_ring_build }
                 tripleo::ringbuilder::part_power: {get_input: swift_part_power}
                 tripleo::ringbuilder::replicas: {get_input: swift_replicas}
                 tripleo::ringbuilder::min_part_hours: {get_input: swift_min_part_hours}
                 swift_mount_check: {get_input: swift_mount_check}
-
-                # NOTE(dprince): build_ring support is currently not wired in.
-                # See: https://review.openstack.org/#/c/109225/
-                tripleo::ringbuilder::build_ring: True
 
                 # Cinder
                 cinder_enable_nfs_backend: {get_input: cinder_enable_nfs_backend}
@@ -1176,6 +1199,7 @@ resources:
                 mysql_innodb_buffer_pool_size: {get_input: mysql_innodb_buffer_pool_size}
                 mysql_max_connections: {get_input: mysql_max_connections}
                 mysql::server::root_password: {get_input: mysql_root_password}
+                mysql_clustercheck_password: {get_input: mysql_clustercheck_password}
                 mysql_cluster_name: {get_input: mysql_cluster_name}
                 mysql_bind_host: {get_input: mysql_network}
                 mysql_virtual_ip: {get_input: mysql_virtual_ip}

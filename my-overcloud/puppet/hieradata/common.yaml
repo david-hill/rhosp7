@@ -33,8 +33,6 @@ sysctl_settings:
     value: 0
   net.ipv6.conf.default.autoconf:
     value: 0
-  net.ipv6.conf.default.disable_ipv6:
-    value: 1
 
 nova::rabbit_heartbeat_timeout_threshold: 60
 neutron::rabbit_heartbeat_timeout_threshold: 60

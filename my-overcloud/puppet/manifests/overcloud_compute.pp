@@ -97,9 +97,78 @@ if $nova_ipv6 {
 } else {
   $vncserver_listen = '0.0.0.0'
 }
+
+# START CVE-2017-2637 - Switch to SSH for migration
+# Libvirt setup (live-migration)
+class { '::nova::migration::libvirt':
+  transport          => 'ssh',
+  client_user        => 'nova_migration',
+  client_extraparams => {'keyfile' => '/etc/nova/migration/identity'}
+}
+
 class { '::nova::compute::libvirt' :
   vncserver_listen => $vncserver_listen,
 }
+
+# Nova SSH tunnel setup (cold-migration)
+# Server side
+include ::ssh::server
+$allow_type = sprintf('LocalAddress %s User', join(hiera('migration_ssh_localaddrs'),','))
+$allow_name = 'nova_migration'
+$deny_type = 'LocalAddress'
+$deny_name = sprintf('!%s', join(hiera('migration_ssh_localaddrs'),',!'))
+ssh::server::match_block { 'nova_migration deny':
+  name    => $deny_name,
+  type    => $deny_type,
+  order   => 2,
+  options => {
+    'DenyUsers' => 'nova_migration'
+  },
+  notify  => Service['sshd']
+}
+ssh::server::match_block { 'nova_migration allow':
+  name    => $allow_name,
+  type    => $allow_type,
+  order   => 1,
+  options => {
+    'ForceCommand'           => '/bin/nova-migration-wrapper',
+    'PasswordAuthentication' => 'no',
+    'AllowTcpForwarding'     => 'no',
+    'X11Forwarding'          => 'no',
+    'AuthorizedKeysFile'     => '/etc/nova/migration/authorized_keys'
+  },
+  notify  => Service['sshd']
+}
+$migration_ssh_key = hiera('migration_ssh_key')
+file { '/etc/nova/migration/authorized_keys':
+  content => $migration_ssh_key['public_key'],
+  mode    => '0640',
+  owner   => 'root',
+  group   => 'nova_migration',
+  require => Package['openstack-nova-migration'],
+}
+# Client side
+file { '/etc/nova/migration/identity':
+  content => $migration_ssh_key['private_key'],
+  mode    => '0600',
+  owner   => 'nova',
+  group   => 'nova',
+  require => Package['openstack-nova-migration'],
+}
+
+# Remove the VIR_MIGRATE_TUNNELLED from the block_migration_flags which is
+# needed to work in RHOSP7, other versions work with the defaults. See
+# rhbz#1211457
+if !defined(Nova_config['libvirt/block_migration_flag']) {
+  nova_config {
+    'libvirt/block_migration_flag': value => 'VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_NON_SHARED_INC';
+  }
+}
+package {'openstack-nova-migration':
+  ensure => installed
+}
+# END CVE-2017-2637118
+
 include ::nova::network::neutron
 include ::neutron
 

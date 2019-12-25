@@ -23,6 +23,9 @@ resource_registry:
   OS::TripleO::AllNodes::SoftwareConfig: puppet/all-nodes-config.yaml
   OS::TripleO::BootstrapNode::SoftwareConfig: puppet/bootstrap-config.yaml
 
+  OS::TripleO::Ssh::HostPubKey: extraconfig/tasks/ssh/host_public_key.yaml
+  OS::TripleO::Ssh::KnownHostsConfig: extraconfig/tasks/ssh/known_hosts_config.yaml
+
   # Tasks (for internal TripleO usage)
   OS::TripleO::Tasks::PackageUpdate: extraconfig/tasks/yum_update.yaml
   # set to {pre,post}_puppet_pacemaker.yaml to set pcmk in maintenance mode
@@ -32,6 +35,10 @@ resource_registry:
   OS::TripleO::Tasks::VolumePostPuppet: extraconfig/tasks/post_puppet_cinder_storage.yaml
   OS::TripleO::Tasks::StoragePostPuppet: extraconfig/tasks/post_puppet_swift_storage.yaml
   OS::TripleO::Tasks::CephStoragePostPuppet: extraconfig/tasks/post_puppet_ceph_storage.yaml
+
+  # This creates the "heat-admin" user for all OS images by default
+  # To disable, replace with firstboot/userdata_default.yaml
+  OS::TripleO::NodeAdminUserData: firstboot/userdata_heat_admin.yaml
 
   # Hooks for operator extra config
   # NodeUserData == Cloud-init additional user-data, e.g cloud-config

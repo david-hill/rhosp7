@@ -186,13 +186,13 @@ parameters:
     description: |
         Comma-separated list of <tun_min>:<tun_max> tuples enumerating ranges
         of GRE tunnel IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NeutronVniRanges:
     description: |
         Comma-separated list of <vni_min>:<vni_max> tuples enumerating ranges
         of VXLAN VNI IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NeutronCorePlugin:
     default: 'ml2'
@@ -265,7 +265,6 @@ parameters:
     description: The username for RabbitMQ
     type: string
   RabbitPassword:
-    default: guest
     description: The password for RabbitMQ
     type: string
     hidden: true
@@ -484,6 +483,13 @@ parameters:
     default: false
     description: Enable IPv6 in Memcached
     type: boolean
+  MigrationSshKey:
+    type: json
+    description: >
+      SSH key for migration.
+      Expects a dictionary with keys 'public_key' and 'private_key'.
+      Values should be identical to SSH public/private key files.
+    default: {}
   MysqlInnodbBufferPoolSize:
     description: >
         Specifies the size of the buffer pool in megabytes. Setting to
@@ -641,6 +647,8 @@ parameters:
       BlockStorageHostnameResolveNetwork: internal_api
       ObjectStorageHostnameResolveNetwork: internal_api
       CephStorageHostnameResolveNetwork: storage
+      NovaColdMigrationNetwork: ctlplane
+      NovaLibvirtNetwork: internal_api
     description: Mapping of service_name -> network name. Typically set
                  via parameter_defaults in the resource registry.
     type: json
@@ -966,6 +974,7 @@ resources:
           KeyName: {get_param: KeyName}
           KeystoneAdminApiVirtualIP: {get_attr: [VipMap, net_ip_map, {get_param: [ServiceNetMap, KeystoneAdminApiNetwork]}]}
           KeystonePublicApiVirtualIP: {get_attr: [VipMap, net_ip_map, {get_param: [ServiceNetMap, KeystonePublicApiNetwork]}]}
+          MigrationSshKey: {get_param: MigrationSshKey}
           NeutronBridgeMappings: {get_param: NeutronBridgeMappings}
           NeutronEnableTunnelling: {get_param: NeutronEnableTunnelling}
           NeutronFlatNetworks: {get_param: NeutronFlatNetworks}
@@ -1504,6 +1513,21 @@ resources:
         cephstorage_config: {get_attr: [CephStorage, attributes, config_identifier]}
         deployment_identifier: {get_param: DeployIdentifier}
       UpdateIdentifier: {get_param: UpdateIdentifier}
+
+  SshKnownHostsConfig:
+    type: OS::TripleO::Ssh::KnownHostsConfig
+    properties:
+      known_hosts:
+        list_join:
+          - ''
+          - {get_attr: [Compute, known_hosts_entry]}
+
+  ComputeSshKnownHostsDeployment:
+    type: OS::Heat::StructuredDeployments
+    properties:
+      name: ComputeSshKnownHostsDeployment
+      config: {get_resource: SshKnownHostsConfig}
+      servers: {get_attr: [Compute, attributes, nova_server_resource]}
 
 outputs:
   KeystoneURL:

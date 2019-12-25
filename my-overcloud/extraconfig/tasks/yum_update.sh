@@ -46,6 +46,20 @@ fi
 pacemaker_status=$(systemctl is-active pacemaker)
 pacemaker_dumpfile=$(mktemp)
 
+# Special-case OVS for https://bugs.launchpad.net/tripleo/+bug/1635205
+if [[ -n $(rpm -q --scripts openvswitch | awk '/postuninstall/,/*/' | grep "systemctl.*try-restart") ]]; then
+    echo "Manual upgrade of openvswitch - restart in postun detected"
+    mkdir OVS_UPGRADE || true
+    pushd OVS_UPGRADE
+    echo "Attempting to downloading latest openvswitch with yumdownloader"
+    yumdownloader --resolve openvswitch
+    echo "Updating openvswitch with nopostun option"
+    rpm -U --replacepkgs --nopostun ./*.rpm
+    popd
+else
+    echo "Skipping manual upgrade of openvswitch - no restart in postun detected"
+fi
+
 if [[ "$pacemaker_status" == "active" ]] ; then
 SERVICES="memcached
 httpd
@@ -128,6 +142,9 @@ openstack-nova-scheduler"
     done
     # mongod start timeout is higher, setting only stop timeout
     pcs -f $pacemaker_dumpfile resource update mongod op start timeout=370s op  stop timeout=200s
+
+    echo "Making sure rabbitmq has the notify=true meta parameter"
+    pcs -f $pacemaker_dumpfile resource update rabbitmq meta notify=true
 
     echo "Applying new Pacemaker config"
     pcs cluster cib-push $pacemaker_dumpfile

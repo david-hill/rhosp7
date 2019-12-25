@@ -78,6 +78,13 @@ parameters:
       scripts or be sure to keep 'datacentre' as a mapping network name.
     type: string
     default: "datacentre:br-ex"
+  MigrationSshKey:
+    type: json
+    description: >
+      SSH key for migration.
+      Expects a dictionary with keys 'public_key' and 'private_key'.
+      Values should be identical to SSH public/private key files.
+    default: {}
   NeutronEnableTunnelling:
     type: string
     default: "True"
@@ -123,13 +130,13 @@ parameters:
     description: |
         Comma-separated list of <tun_min>:<tun_max> tuples enumerating ranges
         of GRE tunnel IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NeutronVniRanges:
     description: |
         Comma-separated list of <vni_min>:<vni_max> tuples enumerating ranges
         of VXLAN VNI IDs that are available for tenant network allocation
-    default: "1:1000"
+    default: ["1:1000", ]
     type: comma_delimited_list
   NeutronPublicInterfaceRawDevice:
     default: ''
@@ -193,6 +200,13 @@ parameters:
   NovaComputeLibvirtType:
     type: string
     default: ''
+  NovaComputeLibvirtDisableTcp:
+    type: boolean
+    default: false
+    description: |
+      *DEPRECATED* No longer used or does anything. SSH migration has replaced
+      this option. See https://access.redhat.com/solutions/3022771 for
+      additional details.
   NovaComputeLibvirtVifDriver:
     default: ''
     description: Libvirt VIF driver configuration for the network
@@ -228,7 +242,6 @@ parameters:
     type: string
     default: ''  # Has to be here because of the ignored empty value bug
   RabbitPassword:
-    default: guest
     description: The password for RabbitMQ
     type: string
     hidden: true
@@ -293,6 +306,29 @@ parameters:
     description: >
       The DNS domain used for the hosts. This should match the dhcp_domain
       configured in the Undercloud neutron. Defaults to localdomain.
+  SshServerOptions:
+    default:
+      HostKey:
+        - '/etc/ssh/ssh_host_rsa_key'
+        - '/etc/ssh/ssh_host_ecdsa_key'
+        - '/etc/ssh/ssh_host_ed25519_key'
+      SyslogFacility: 'AUTHPRIV'
+      AuthorizedKeysFile: '.ssh/authorized_keys'
+      PasswordAuthentication: 'no'
+      ChallengeResponseAuthentication: 'no'
+      GSSAPIAuthentication: 'yes'
+      GSSAPICleanupCredentials: 'no'
+      UsePAM: 'yes'
+      X11Forwarding: 'yes'
+      UsePrivilegeSeparation: 'sandbox'
+      AcceptEnv:
+        - 'LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES'
+        - 'LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT'
+        - 'LC_IDENTIFICATION LC_ALL LANGUAGE'
+        - 'XMODIFIERS'
+      Subsystem: 'sftp  /usr/libexec/openssh/sftp-server'
+    description: Mapping of sshd_config values
+    type: json
 
 
 resources:
@@ -309,9 +345,26 @@ resources:
       networks:
         - network: ctlplane
       user_data_format: SOFTWARE_CONFIG
-      user_data: {get_resource: NodeUserData}
+      user_data: {get_resource: UserData}
       name: {get_param: Hostname}
 
+  # Combine the NodeAdminUserData and NodeUserData mime archives
+  UserData:
+    type: OS::Heat::MultipartMime
+    properties:
+      parts:
+      - config: {get_resource: NodeAdminUserData}
+        type: multipart
+      - config: {get_resource: NodeUserData}
+        type: multipart
+
+  # Creates the "heat-admin" user if configured via the environment
+  # Should return a OS::Heat::MultipartMime reference via OS::stack_id
+  NodeAdminUserData:
+    type: OS::TripleO::NodeAdminUserData
+
+  # For optional operator additional userdata
+  # Should return a OS::Heat::MultipartMime reference via OS::stack_id
   NodeUserData:
     type: OS::TripleO::NodeUserData
 
@@ -391,7 +444,14 @@ resources:
               raw_data: {get_file: hieradata/compute.yaml}
               mapped_data:
                 cinder_enable_nfs_backend: {get_input: cinder_enable_nfs_backend}
+                force_disable_libvirt_tcp: {get_input: force_disable_libvirt_tcp}
+                live_migration_ssh_inbound_addr: {get_input: live_migration_ssh_inbound_addr}
+                cold_migration_ssh_inbound_addr: {get_input: cold_migration_ssh_inbound_addr}
+                migration_ssh_key: {get_input: migration_ssh_key}
+                migration_ssh_localaddrs: {get_input: migration_ssh_localaddrs}
                 nova::use_ipv6: {get_input: nova_ipv6}
+                ssh:server::options: {get_input: ssh_server_options}
+                ssh:server::storeconfigs_enabled: false
                 nova::debug: {get_input: debug}
                 nova::rabbit_userid: {get_input: rabbit_username}
                 nova::rabbit_password: {get_input: rabbit_password}
@@ -466,6 +526,7 @@ resources:
       server: {get_resource: NovaCompute}
       input_values:
         cinder_enable_nfs_backend: {get_param: CinderEnableNfsBackend}
+        force_disable_libvirt_tcp: {get_param: NovaComputeLibvirtDisableTcp}
         debug: {get_param: Debug}
         nova_compute_driver: {get_param: NovaComputeDriver}
         nova_compute_libvirt_type: {get_param: NovaComputeLibvirtType}
@@ -475,7 +536,14 @@ resources:
         nova_password: {get_param: NovaPassword}
         nova_enable_rbd_backend: {get_param: NovaEnableRbdBackend}
         nova_ipv6: {get_param: NovaIPv6}
+        migration_ssh_key: {get_param: MigrationSshKey}
+        ssh_server_options: {get_param: SshServerOptions}
         nova_vnc_proxyclient_address: {get_attr: [NetIpMap, net_ip_map, {get_param: [ServiceNetMap, NovaVncProxyNetwork]}]}
+        live_migration_ssh_inbound_addr: {get_attr: [NetIpMap, net_ip_map, {get_param: [ServiceNetMap, NovaLibvirtNetwork]}]}
+        cold_migration_ssh_inbound_addr: {get_attr: [NetIpMap, net_ip_map, {get_param: [ServiceNetMap, NovaColdMigrationNetwork]}]}
+        migration_ssh_localaddrs:
+          - "%{hiera('live_migration_ssh_inbound_addr')}"
+          - "%{hiera('cold_migration_ssh_inbound_addr')}"
         nova_vncproxy_protocol: {get_param: [EndpointMap, NovaVNCProxyPublic, protocol]}
         nova_vncproxy_host:
           str_replace:
@@ -572,6 +640,12 @@ resources:
     properties:
       server: {get_resource: NovaCompute}
 
+  SshHostPubKey:
+    type: OS::TripleO::Ssh::HostPubKey
+    depends_on: NovaComputeDeployment
+    properties:
+        server: {get_resource: NovaCompute}
+
   # Hook for site-specific additional pre-deployment config, e.g extra hieradata
   ComputeExtraConfigPre:
     depends_on: NovaComputeDeployment
@@ -629,6 +703,44 @@ outputs:
     description: Heat resource handle for the Nova compute server
     value:
       {get_resource: NovaCompute}
+  known_hosts_entry:
+    description: Entry for ssh known hosts
+    value:
+      str_replace:
+        template: "PRIMARYIP,PRIMARYHOST.DOMAIN,PRIMARYHOST,\
+INTERNAL_APIIP,INTERNAL_APIHOST.DOMAIN,INTERNAL_APIHOST,\
+STORAGEIP,STORAGEHOST.DOMAIN,STORAGEHOST,\
+TENANTIP,TENANTHOST.DOMAIN,TENANTHOST,\
+CTLPLANEIP,CTLPLANEHOST.DOMAIN,CTLPLANEHOST HOSTSSHPUBKEY"
+        params:
+          PRIMARYIP: {get_attr: [NetIpMap, net_ip_map, {get_param: [ServiceNetMap, ComputeHostnameResolveNetwork]}]}
+          DOMAIN: {get_param: CloudDomain}
+          PRIMARYHOST: {get_attr: [NovaCompute, name]}
+          INTERNAL_APIIP: {get_attr: [InternalApiPort, ip_address]}
+          INTERNAL_APIHOST:
+            list_join:
+            - '.'
+            - - {get_attr: [NovaCompute, name]}
+              - internalapi
+          STORAGEIP: {get_attr: [StoragePort, ip_address]}
+          STORAGEHOST:
+            list_join:
+            - '.'
+            - - {get_attr: [NovaCompute, name]}
+              - storage
+          TENANTIP: {get_attr: [TenantPort, ip_address]}
+          TENANTHOST:
+            list_join:
+            - '.'
+            - - {get_attr: [NovaCompute, name]}
+              - tenant
+          CTLPLANEIP: {get_attr: [NovaCompute, networks, ctlplane, 0]}
+          CTLPLANEHOST:
+            list_join:
+            - '.'
+            - - {get_attr: [NovaCompute, name]}
+              - ctlplane
+          HOSTSSHPUBKEY: {get_attr: [SshHostPubKey, ecdsa]}
   config_identifier:
     description: identifier which changes if the node configuration may need re-applying
     value:

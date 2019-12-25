@@ -84,6 +84,7 @@ cinder::scheduler::scheduler_driver: cinder.scheduler.filter_scheduler.FilterSch
 cinder::config::cinder_config:
   DEFAULT/host:
     value: hostgroup
+cinder_user_enabled_backends: []
 
 # heat
 heat::engine::configure_delegated_roles: false

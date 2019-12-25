@@ -459,7 +459,7 @@ if hiera('step') >= 3 {
 
   $cinder_enabled_backends = delete_undef_values([$cinder_iscsi_backend, $cinder_rbd_backend, $cinder_netapp_backend, $cinder_nfs_backend])
   class { '::cinder::backends' :
-    enabled_backends => $cinder_enabled_backends,
+    enabled_backends => union($cinder_enabled_backends, hiera('cinder_user_enabled_backends')),
   }
 
   # swift proxy

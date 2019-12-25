@@ -6,7 +6,8 @@ resource_registry:
   OS::TripleO::Network::InternalApi: ../network/internal_api_v6.yaml
   OS::TripleO::Network::StorageMgmt: ../network/storage_mgmt_v6.yaml
   OS::TripleO::Network::Storage: ../network/storage_v6.yaml
-  OS::TripleO::Network::Tenant: ../network/tenant_v6.yaml
+  # IPv4 until OVS and Neutron support IPv6 tunnel endpoints
+  OS::TripleO::Network::Tenant: ../network/tenant.yaml
 
   # Port assignments for the VIPs
   OS::TripleO::Network::Ports::ExternalVipPort: ../network/ports/external_v6.yaml
@@ -20,12 +21,12 @@ resource_registry:
   OS::TripleO::Controller::Ports::InternalApiPort: ../network/ports/internal_api_v6.yaml
   OS::TripleO::Controller::Ports::StoragePort: ../network/ports/storage_v6.yaml
   OS::TripleO::Controller::Ports::StorageMgmtPort: ../network/ports/storage_mgmt_v6.yaml
-  OS::TripleO::Controller::Ports::TenantPort: ../network/ports/tenant_v6.yaml
+  OS::TripleO::Controller::Ports::TenantPort: ../network/ports/tenant.yaml
 
   # Port assignments for the compute role
   OS::TripleO::Compute::Ports::InternalApiPort: ../network/ports/internal_api_v6.yaml
   OS::TripleO::Compute::Ports::StoragePort: ../network/ports/storage_v6.yaml
-  OS::TripleO::Compute::Ports::TenantPort: ../network/ports/tenant_v6.yaml
+  OS::TripleO::Compute::Ports::TenantPort: ../network/ports/tenant.yaml
 
   # Port assignments for the ceph storage role
   OS::TripleO::CephStorage::Ports::StoragePort: ../network/ports/storage_v6.yaml

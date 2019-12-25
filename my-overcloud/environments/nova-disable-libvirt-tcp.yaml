@@ -1,0 +1,6 @@
+# Use this file to prevent libvirt from listening over TCP.
+# See https://access.redhat.com/solutions/3022771 for additional details.
+# NOTE: This is no longer used and does nothing. The patch to enable live
+# migration of SSH has been added (and added this note)
+parameter_defaults:
+  NovaComputeLibvirtDisableTcp: true

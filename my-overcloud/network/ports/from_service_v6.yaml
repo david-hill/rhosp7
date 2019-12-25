@@ -1,7 +1,7 @@
 heat_template_version: 2015-04-30
 
 description: >
-  Returns an IP from a service mapped list of IPs
+  Returns an IP from a service mapped list of IPv6 IPs
 
 parameters:
   ServiceName:
@@ -33,10 +33,10 @@ outputs:
     description: network IP
     value: {get_param: [ServiceVips, {get_param: ServiceName}]}
   ip_address_uri:
-    description: external network IP (for compatibility with IPv6)
+    description: network IP (with brackets for use in URLs)
     value:
-      list_join:
-      - ''
-      - - '['
-        - {get_param: [ServiceVips, {get_param: ServiceName}]}
-        - ']'
+          list_join:
+          - ''
+          - - '['
+            - {get_param: [ServiceVips, {get_param: ServiceName}]}
+            - ']'
