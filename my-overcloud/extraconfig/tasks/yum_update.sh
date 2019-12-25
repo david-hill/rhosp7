@@ -7,6 +7,8 @@
 #   command - yum sub-command to run, defaults to "update"
 #   command_arguments - yum command arguments, defaults to ""
 
+set -x
+
 echo "Started yum_update.sh on server $deploy_server_id at `date`"
 echo -n "false" > $heat_outputs_path.update_managed_packages
 
@@ -122,10 +124,10 @@ openstack-nova-scheduler"
 
     echo "Setting resource start/stop timeouts"
     for service in $SERVICES; do
-        pcs -f $pacemaker_dumpfile resource update $service op start timeout=100s op stop timeout=100s
+        pcs -f $pacemaker_dumpfile resource update $service op start timeout=200s op stop timeout=200s
     done
     # mongod start timeout is higher, setting only stop timeout
-    pcs -f $pacemaker_dumpfile resource update mongod op stop timeout=100s
+    pcs -f $pacemaker_dumpfile resource update mongod op start timeout=370s op  stop timeout=200s
 
     echo "Applying new Pacemaker config"
     pcs cluster cib-push $pacemaker_dumpfile
@@ -146,21 +148,25 @@ openstack-nova-scheduler"
     kill $(ps ax | grep -e "keepalived.*\.pid-vrrp" | awk '{print $1}') 2>/dev/null || :
     kill $(ps ax | grep -e "radvd.*\.pid\.radvd" | awk '{print $1}') 2>/dev/null || :
 else
-    echo "Excluding upgrading packages that are handled by config management tooling"
-    command_arguments="$command_arguments --skip-broken"
-    for exclude in $(cat /var/lib/tripleo/installed-packages/* | sort -u); do
-        command_arguments="$command_arguments --exclude $exclude"
-    done
+    echo "Upgrading openstack-puppet-modules"
+    yum -q -y update openstack-puppet-modules
+    # Link any new puppet modules into /etc/pupppet/modules
+    ln -f -s /usr/share/openstack-puppet/modules/* /etc/puppet/modules/
+    echo "Upgrading other packages is handled by config management tooling"
+    echo -n "true" > $heat_outputs_path.update_managed_packages
+    exit 0
 fi
 
 command=${command:-update}
-full_command="yum -y $command $command_arguments"
+full_command="yum -q -y $command $command_arguments"
 echo "Running: $full_command"
 
 result=$($full_command)
 return_code=$?
 echo "$result"
 echo "yum return code: $return_code"
+# Link any new puppet modules into /etc/pupppet/modules
+ln -f -s /usr/share/openstack-puppet/modules/* /etc/puppet/modules/
 
 if [[ "$pacemaker_status" == "active" ]] ; then
     echo "Starting cluster node"
@@ -189,9 +195,6 @@ if [[ "$pacemaker_status" == "active" ]] ; then
     done
 
     pcs status
-
-else
-    echo -n "true" > $heat_outputs_path.update_managed_packages
 fi
 
 echo "Finished yum_update.sh on server $deploy_server_id at `date`"
